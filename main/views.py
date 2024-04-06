@@ -1,12 +1,8 @@
 from django.shortcuts import render
-
-# Create your views here.
-# main/views.py
-
-from django.shortcuts import render
 import numpy as np
 from scipy.optimize import minimize
 import plotly.graph_objs as go
+from django.http import HttpResponseBadRequest
 
 # Backend code
 D_AB_exp = 1.33e-5
@@ -53,46 +49,79 @@ def index(request):
     return render(request, 'index.html')
 
 def results(request):
-    a_AB_init = 900
-    a_BA_init = 900
-    params_initial = [a_AB_init, a_BA_init]
-    tolerance = 1e-5
-    max_iterations = 1000
+    if request.method == 'POST':
+        # Récupérer les données du formulaire
+        Xa = request.POST.get('Xa')
+        D_AB_exp = request.POST.get('D_AB_exp')
+        T = request.POST.get('T')
+        lambda_a = request.POST.get('lambda_a')
+        lambda_b = request.POST.get('lambda_b')
+        q_a = request.POST.get('q_a')
+        q_b = request.POST.get('q_b')
+        D_AB0 = request.POST.get('D_AB0')
+        D_BA0 = request.POST.get('D_BA0')
 
-    for iteration in range(max_iterations):
-        result = minimize(objective, params_initial, method='Powell')
-        a_AB_opt, a_BA_opt = result.x
-        D_AB_opt = calculate_D_AB([a_AB_opt, a_BA_opt], Xa)
-        error = abs(D_AB_opt - D_AB_exp)
+        # Vérifier si tous les champs sont remplis
+        if None in [Xa, D_AB_exp, T, lambda_a, lambda_b, q_a, q_b, D_AB0, D_BA0]:
+            return HttpResponseBadRequest("Tous les champs doivent être remplis.")
 
-        params_initial = [a_AB_opt, a_BA_opt]
+        # Convertir les valeurs en float
+        try:
+            Xa = float(Xa)
+            D_AB_exp = float(D_AB_exp)
+            T = float(T)
+            lambda_a = float(lambda_a)
+            lambda_b = float(lambda_b)
+            q_a = float(q_a)
+            q_b = float(q_b)
+            D_AB0 = float(D_AB0)
+            D_BA0 = float(D_BA0)
+        except ValueError:
+            return HttpResponseBadRequest("Veuillez saisir des valeurs numériques valides.")
 
-        if error <= tolerance:
-            break
+        # Continuer avec le reste de votre logique d'optimisation
+        a_AB_init = 900
+        a_BA_init = 900
+        params_initial = [a_AB_init, a_BA_init]
+        tolerance = 1e-5
+        max_iterations = 1000
 
-    # Generating plot
-    Xa_values = np.linspace(0.1, 0.7, 100)
-    D_AB_values = [calculate_D_AB([a_AB_opt, a_BA_opt], Xa) for Xa in Xa_values]
+        for iteration in range(max_iterations):
+            result = minimize(objective, params_initial, method='Powell')
+            a_AB_opt, a_BA_opt = result.x
+            D_AB_opt = calculate_D_AB([a_AB_opt, a_BA_opt], Xa)
+            error = abs(D_AB_opt - D_AB_exp)
 
-    # Creating plotly trace
-    trace = go.Scatter(x=Xa_values, y=D_AB_values, mode='lines', name='D_AB vs Xa')
+            params_initial = [a_AB_opt, a_BA_opt]
 
-    # Creating layout
-    layout = go.Layout(title='Variation de D_AB avec la fraction molaire Xa',
-                       xaxis=dict(title='Fraction molaire Xa'),
-                       yaxis=dict(title='Coefficient de diffusion D_AB (cm^2/s)'),
-                       showlegend=True)
+            if error <= tolerance:
+                break
 
-    # Creating figure
-    fig = go.Figure(data=[trace], layout=layout)
+        # Generating plot
+        Xa_values = np.linspace(0.1, 0.7, 100)
+        D_AB_values = [calculate_D_AB([a_AB_opt, a_BA_opt], Xa) for Xa in Xa_values]
 
-    # Converting plotly figure to JSON
-    plot_json = fig.to_json()
+        # Creating plotly trace
+        trace = go.Scatter(x=Xa_values, y=D_AB_values, mode='lines', name='D_AB vs Xa')
 
-    return render(request, 'results.html', {
-        'a_AB_opt': a_AB_opt,
-        'a_BA_opt': a_BA_opt,
-        'D_AB_opt': D_AB_opt,
-        'error': abs(D_AB_opt - D_AB_exp),
-        'plot_json': plot_json
-    })
+        # Creating layout
+        layout = go.Layout(title='Variation de D_AB avec la fraction molaire Xa',
+                           xaxis=dict(title='Fraction molaire Xa'),
+                           yaxis=dict(title='Coefficient de diffusion D_AB (cm^2/s)'),
+                           showlegend=True)
+
+        # Creating figure
+        fig = go.Figure(data=[trace], layout=layout)
+
+        # Converting plotly figure to JSON
+        plot_json = fig.to_json()
+
+        return render(request, 'results.html', {
+            'a_AB_opt': a_AB_opt,
+            'a_BA_opt': a_BA_opt,
+            'D_AB_opt': D_AB_opt,
+            'error': abs(D_AB_opt - D_AB_exp),
+            'plot_json': plot_json
+        })
+    else:
+        return HttpResponseBadRequest("Cette page ne peut être accédée que via une soumission de formulaire.")
